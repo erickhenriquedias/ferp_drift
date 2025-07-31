@@ -1,4 +1,4 @@
-# Enhanced Drift System
+# Ferp Drift System
 
 An advanced drift system for FiveM servers with comprehensive kit management, durability tracking, and database integration. Compatible with QB-Core and QBX-Core frameworks.
 
