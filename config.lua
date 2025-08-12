@@ -62,6 +62,12 @@ Config.AllowedVehicleClasses = {
     [12] = false, -- Motorcycle
 }
 
+-- Speed Limit Configuration
+Config.SpeedLimit = {
+    enabled = false, -- true to enable speed limit
+    maxSpeed = 150, -- Maximum speed in km/h (adjust as needed)
+}
+
 -- Controls
 Config.Controls = {
     toggleKey = 'F9',
@@ -120,6 +126,13 @@ Config.Notifications = {
     needJob = 'You need to be a %s to install/replace drift kit!',
     noJobOnline = 'No %s online to install the kit!',
     dataSaved = 'Drift kit data automatically saved.',
+    invalidVehicle = 'Invalid vehicle!',
+    couldNotGetVehicleInfo = 'Could not get vehicle information!',
+    tooFarFromVehicle = 'You are too far from the vehicle!',
+    vehicleNotFound = 'Vehicle not found!',
+    movedTooFar = 'You moved too far from the vehicle!',
+    errorGettingVehicleInfo = 'Error getting vehicle information!',
+    driftModeToggling = 'Please wait, drift mode is being toggled...',
 }
 
 -- Exports Configuration

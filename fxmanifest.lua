@@ -13,15 +13,21 @@ dependencies {
 }
 
 shared_scripts {
-    '@ox_lib/init.lua',
-    'config.lua'
+    '@ox_lib/init.lua'
 }
 
 client_scripts {
+    'config.lua',
     'client/cl_drift.lua'
 }
 
 server_scripts {
     '@oxmysql/lib/MySQL.lua',
+    'config.lua',
     'server/sv_drift.lua'
+}
+
+escrow_ignore {
+  'config.lua',
+  'integration/hud_integration_example.lua'
 }

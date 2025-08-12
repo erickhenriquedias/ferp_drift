@@ -32,6 +32,7 @@ local playerState = {
 -- Thread control
 local mainThreadActive = false
 local durabilityThreadActive = false
+local isToggling = false -- Adicionar controle de toggle
 
 --[[
     Framework e Cache Functions
@@ -69,7 +70,7 @@ end
 
 local function GetCachedPed()
     local currentTime = GetGameTimer()
-    if currentTime - playerCache.lastPedUpdate > 1000 then -- Cache ped por 1 segundo
+    if currentTime - playerCache.lastPedUpdate > 1000 then 
         playerCache.ped = PlayerPedId()
         playerCache.lastPedUpdate = currentTime
     end
@@ -78,7 +79,7 @@ end
 
 local function GetPlayerData()
     local currentTime = GetGameTimer()
-    if not playerCache.data or (currentTime - playerCache.lastUpdate) > 10000 then -- Cache por 10 segundos
+    if not playerCache.data or (currentTime - playerCache.lastUpdate) > 10000 then
         if FrameworkName == 'qbx' then
             playerCache.data = Framework:GetPlayerData()
         elseif FrameworkName == 'qb' then
@@ -97,11 +98,10 @@ local function GetVehicleInfo(vehicle)
     local currentTime = GetGameTimer()
     
     -- Verificar cache
-    if vehicleCache[vehicle] and (currentTime - vehicleCache[vehicle].time) < 30000 then -- Cache por 30 segundos
+    if vehicleCache[vehicle] and (currentTime - vehicleCache[vehicle].time) < 30000 then
         return vehicleCache[vehicle]
     end
     
-    -- Criar nova entrada no cache
     local plate = GetVehicleNumberPlateText(vehicle):gsub("%s+", "")
     local vehicleClass = GetVehicleClass(vehicle)
     local isDriftVehicle = Config.AllowedVehicleClasses[vehicleClass] or false
@@ -190,7 +190,6 @@ local function updateKitDurability(vehicle, newDurability, saveToDb)
         SaveVehicleKitData(vehicleInfo.plate, vehicleKitData[vehicleInfo.plate], false)
     end
     
-    -- Kit quebrado
     if vehicleKitData[vehicleInfo.plate].durability <= Config.KitDurability.breakThreshold then
         vehicleKitData[vehicleInfo.plate].installed = false
         disableDrift(vehicle)
@@ -199,7 +198,6 @@ local function updateKitDurability(vehicle, newDurability, saveToDb)
         return
     end
     
-    -- Aviso de durabilidade baixa
     if vehicleKitData[vehicleInfo.plate].durability <= Config.KitDurability.warningThreshold and 
        oldDurability > Config.KitDurability.warningThreshold then
         local durabilityPercent = math.floor(vehicleKitData[vehicleInfo.plate].durability)
@@ -265,7 +263,6 @@ local function enableDrift(vehicle)
     driftStartTimes[vehicle] = GetGameTimer()
     lastDurabilityChecks[vehicle] = GetGameTimer()
     
-    -- Ativar thread de durabilidade apenas quando necessário
     if Config.KitDurability.enabled and not durabilityThreadActive then
         durabilityThreadActive = true
         CreateThread(function()
@@ -294,7 +291,7 @@ local function enableDrift(vehicle)
                     break
                 end
                 
-                Wait(30000) -- Verificar a cada 30 segundos quando ativo
+                Wait(30000)
             end
         end)
     end
@@ -315,7 +312,6 @@ function disableDrift(vehicle)
         SetVehicleEnginePowerMultiplier(vehicle, originalVehicleData[vehicle].enginePowerMultiplier)
     end
     
-    -- Atualizar durabilidade baseado no tempo de uso
     if Config.KitDurability.enabled and driftStartTimes[vehicle] then
         local currentTime = GetGameTimer()
         local usageTime = (currentTime - driftStartTimes[vehicle]) / 1000 / 60 -- minutes
@@ -342,13 +338,13 @@ end
 
 local function installDriftKit(vehicle)
     if not vehicle or not DoesEntityExist(vehicle) then 
-        Notify('Invalid vehicle!', 'error')
+        Notify(Config.Notifications.invalidVehicle, 'error')
         return 
     end
     
     local vehicleInfo = GetVehicleInfo(vehicle)
     if not vehicleInfo then
-        Notify('Could not get vehicle information!', 'error')
+        Notify(Config.Notifications.couldNotGetVehicleInfo, 'error')
         return
     end
     
@@ -363,7 +359,7 @@ local function installDriftKit(vehicle)
     local distance = #(pedCoords - vehCoords)
     
     if distance > Config.OXTarget.distance then
-        Notify('You are too far from the vehicle!', 'error')
+        Notify(Config.Notifications.tooFarFromVehicle, 'error')
         return
     end
     
@@ -373,13 +369,13 @@ end
 
 local function replaceDriftKit(vehicle)
     if not vehicle or not DoesEntityExist(vehicle) then 
-        Notify('Invalid vehicle!', 'error')
+        Notify(Config.Notifications.invalidVehicle, 'error')
         return 
     end
     
     local vehicleInfo = GetVehicleInfo(vehicle)
     if not vehicleInfo then
-        Notify('Could not get vehicle information!', 'error')
+        Notify(Config.Notifications.couldNotGetVehicleInfo, 'error')
         return
     end
     
@@ -389,7 +385,7 @@ local function replaceDriftKit(vehicle)
     local distance = #(pedCoords - vehCoords)
     
     if distance > Config.OXTarget.distance then
-        Notify('You are too far from the vehicle!', 'error')
+        Notify(Config.Notifications.tooFarFromVehicle, 'error')
         return
     end
     
@@ -399,7 +395,7 @@ end
 
 local function processKitInstallation(vehicle, isReplace)
     if not vehicle or not DoesEntityExist(vehicle) then
-        Notify('Vehicle not found!', 'error')
+        Notify(Config.Notifications.vehicleNotFound, 'error')
         return
     end
     
@@ -409,13 +405,13 @@ local function processKitInstallation(vehicle, isReplace)
     local distance = #(pedCoords - vehCoords)
     
     if distance > Config.OXTarget.distance then
-        Notify('You moved too far from the vehicle!', 'error')
+        Notify(Config.Notifications.movedTooFar, 'error')
         return
     end
     
     local vehicleInfo = GetVehicleInfo(vehicle)
     if not vehicleInfo then
-        Notify('Error getting vehicle information!', 'error')
+        Notify(Config.Notifications.errorGettingVehicleInfo, 'error')
         return
     end
     
@@ -487,6 +483,12 @@ local function processKitInstallation(vehicle, isReplace)
 end
 
 local function toggleDriftMode()
+    -- Verificar se já está processando um toggle
+    if isToggling then
+        Notify(Config.Notifications.driftModeToggling, 'warning')
+        return
+    end
+    
     local ped = GetCachedPed()
     local vehicle = GetVehiclePedIsIn(ped, false)
     
@@ -508,6 +510,9 @@ local function toggleDriftMode()
     
     local currentState = getDriftState(vehicle)
     local actionText = currentState and Config.Notifications.deactivatingDrift or Config.Notifications.activatingDrift
+    
+    -- Definir flag de processamento
+    isToggling = true
     
     local ok = false
     
@@ -540,6 +545,7 @@ local function toggleDriftMode()
         })
     end
     
+    -- Processar resultado
     if ok then
         if currentState then
             if disableDrift(vehicle) then
@@ -553,6 +559,9 @@ local function toggleDriftMode()
     else
         Notify(Config.Notifications.actionCancelled, 'error')
     end
+    
+    -- Resetar flag de processamento
+    isToggling = false
 end
 
 --[[
@@ -633,10 +642,6 @@ local function handleVehicleEnter(vehicle)
                 SaveVehicleKitData(vehicleInfo.plate, vehicleKitData[vehicleInfo.plate], false)
             end
         end)
-    end
-    
-    if getDriftState(vehicle) then
-        enableDrift(vehicle)
     end
 end
 
@@ -848,6 +853,43 @@ if Config.Exports.enabled then
 end
 
 --[[
+    Speed Limit Thread
+]]--
+
+if Config.SpeedLimit.enabled then
+    CreateThread(function()
+        while true do
+            Wait(100) -- Check every 100ms for smooth control
+            
+            local ped = PlayerPedId()
+            local vehicle = GetVehiclePedIsIn(ped, false)
+            
+            if vehicle ~= 0 and GetPedInVehicleSeat(vehicle, -1) == ped then
+                local vehicleInfo = GetVehicleInfo(vehicle)
+                
+                -- Only apply speed limit if vehicle has drift kit and is in drift mode
+                if vehicleInfo and vehicleInfo.isDriftVehicle and hasKitInstalled(vehicleInfo) and getDriftState(vehicle) then
+                    local currentSpeed = GetEntitySpeed(vehicle) * 3.6 -- Convert m/s to km/h
+                    
+                    if currentSpeed > Config.SpeedLimit.maxSpeed then
+                        local maxSpeedMs = Config.SpeedLimit.maxSpeed / 3.6 -- Convert km/h to m/s
+                        SetEntityMaxSpeed(vehicle, maxSpeedMs)
+                        
+                        -- Optional: Add slight braking force to smoothly reduce speed
+                        if currentSpeed > (Config.SpeedLimit.maxSpeed + 5) then
+                            SetVehicleForwardSpeed(vehicle, maxSpeedMs)
+                        end
+                    end
+                else
+                    -- Remove speed limit when not in drift mode
+                    SetEntityMaxSpeed(vehicle, -1) -- Remove speed limit
+                end
+            end
+        end
+    end)
+end
+
+--[[
     Initialize System
 ]]--
 
@@ -862,14 +904,18 @@ CreateThread(function()
     
     setupGlobalVehicleTarget()
     
+    -- Registrar apenas um comando para evitar dupla execução
     RegisterKeyMapping('drift_toggle', '[Vehicles] Toggle Drift Mode', 'keyboard', Config.Controls.toggleKey)
     RegisterCommand('drift_toggle', function()
         toggleDriftMode()
     end, false)
     
-    RegisterCommand(Config.Controls.toggleCommand, function()
-        toggleDriftMode()
-    end, false)
+    -- Registrar comando alternativo apenas se for diferente
+    if Config.Controls.toggleCommand ~= 'drift_toggle' then
+        RegisterCommand(Config.Controls.toggleCommand, function()
+            toggleDriftMode()
+        end, false)
+    end
     
     Wait(2000) -- Wait for framework to load
     
